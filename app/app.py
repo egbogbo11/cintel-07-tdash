@@ -1,17 +1,19 @@
+import pandas as pd
 import seaborn as sns
+import matplotlib.pyplot as plt
 from faicons import icon_svg
 
 from shiny import reactive
 from shiny.express import input, render, ui
-import palmerpenguins 
+import palmerpenguins
 
+# Load data
 df = palmerpenguins.load_penguins()
 
 ui.page_opts(title="Penguins dashboard", fillable=True)
 
-
 with ui.sidebar(title="Filter controls"):
-    ui.input_slider("mass", "Mass", 2000, 6000, 6000)
+    ui.input_slider("mass", "Mass (g)", 2000, 6000, 6000)
     ui.input_checkbox_group(
         "species",
         "Species",
@@ -47,9 +49,9 @@ with ui.sidebar(title="Filter controls"):
         target="_blank",
     )
 
-
 with ui.layout_column_wrap(fill=False):
-    with ui.value_box(showcase=icon_svg("earlybirds")):
+    # Use a valid icon name (e.g., "kiwi-bird")
+    with ui.value_box(showcase=icon_svg("kiwi-bird")):
         "Number of penguins"
 
         @render.text
@@ -70,19 +72,24 @@ with ui.layout_column_wrap(fill=False):
         def bill_depth():
             return f"{filtered_df()['bill_depth_mm'].mean():.1f} mm"
 
-
 with ui.layout_columns():
     with ui.card(full_screen=True):
         ui.card_header("Bill length and depth")
 
         @render.plot
         def length_depth():
-            return sns.scatterplot(
+            fig, ax = plt.subplots()
+            sns.scatterplot(
                 data=filtered_df(),
                 x="bill_length_mm",
                 y="bill_depth_mm",
                 hue="species",
+                ax=ax,
             )
+            ax.set_xlabel("Bill length (mm)")
+            ax.set_ylabel("Bill depth (mm)")
+            ax.set_title("Bill length vs depth")
+            return fig
 
     with ui.card(full_screen=True):
         ui.card_header("Penguin Data")
@@ -98,12 +105,17 @@ with ui.layout_columns():
             ]
             return render.DataGrid(filtered_df()[cols], filters=True)
 
+# ui.include_css(app_dir / "styles.css")
 
-#ui.include_css(app_dir / "styles.css")
-
-
-@reactive.calc
+@reactive.calc()
 def filtered_df():
-    filt_df = df[df["species"].isin(input.species())]
-    filt_df = filt_df.loc[filt_df["body_mass_g"] < input.mass()]
-    return filt_df
+    # Start with selected species
+    filt_df = df[df["species"].isin(input.species())].copy()
+
+    # Ensure numeric and drop rows without required fields
+    for col in ["body_mass_g", "bill_length_mm", "bill_depth_mm"]:
+        filt_df[col] = pd.to_numeric(filt_df[col], errors="coerce")
+    filt_df = filt_df.dropna(subset=["body_mass_g", "bill_length_mm", "bill_depth_mm"])
+
+    # Include records up to and including the slider value
+    return filt_df.loc[filt_df["body_mass_g"] <= input.mass()]
